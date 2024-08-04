@@ -1,0 +1,15 @@
+[package]
+name = "Glint"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+nom = "7.1.0"
+ciborium = "0.2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_derive = "1.0"
+serde_cbor = "0.11.2"
+peak_alloc = "0.2.0"
+sysinfo = "0.31.2"
+colored = "2.1.0"

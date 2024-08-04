@@ -1,0 +1,5 @@
+function example(a, b):
+    write "Hello, World!"
+    return a * b
+
+write example(2, 5)
