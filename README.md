@@ -28,9 +28,9 @@ To begin using Glint:
    
 2. **Run a Glint Program:** Execute a Glint program by passing a `.glt` file as an argument:
    ```bash
-   cargo run my_program.glt
+   cargo run run my_program.glt
    or
-   Glint my_program.glt
+   Glint run my_program.glt
    ```
 
 ### Documentation
