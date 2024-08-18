@@ -1,5 +1,5 @@
 function example(a, b):
-    write "Hello, World!"
-    return a * b
+    return a + b
 
-write example(2, 5)
+x is example(4, 4)
+write x

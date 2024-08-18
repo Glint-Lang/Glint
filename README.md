@@ -2,7 +2,7 @@
 
 ## Welcome to Glint!
 
-Glint is a lightweight programming language designed for simplicity and performance. It combines both interpreter and compiler capabilities to cater to diverse programming needs. 
+Glint is a lightweight programming language designed for simplicity and performance. It combines both interpreter and compiler capabilities to cater to diverse programming needs.
 
 ### Features:
 - **Interpreted and Compiled:** Glint offers both interpreted and compiled modes. By using `use compiler` and `stop use compiler`, developers can opt for a compiled approach where the syntax includes braces `{}`, introduces typing, and addresses memory safety concerns—ideal for those requiring features typical of compiled languages.
@@ -10,7 +10,7 @@ Glint is a lightweight programming language designed for simplicity and performa
 - **Error Handling:** Glint provides robust error handling with clear feedback to aid debugging.
 
   ![Error Handling Screenshot Placeholder](placeholder-error-handler.png)
-  
+
 - **Simplicity:** Glint features a straightforward syntax that promotes readability and ease of understanding.
 
 - **Performance:** Optimized for speed, Glint outperforms Python and competes closely with languages like JavaScript, Java, and Ruby in benchmarks.
@@ -25,12 +25,12 @@ To begin using Glint:
    cd glint
    cargo build --release
    ```
-   
+
 2. **Run a Glint Program:** Execute a Glint program by passing a `.glt` file as an argument:
    ```bash
-   cargo run my_program.glt
+   cargo run run my_program.glt
    or
-   Glint my_program.glt
+   Glint run my_program.glt
    ```
 
 ### Documentation
@@ -55,7 +55,7 @@ Discover the simplicity and power of Glint with these examples:
 Contributions to Glint are welcome! Fork the repository and submit pull requests.
 
 ### License
-Glint is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
+Glint is licensed under the MIT License. See [LICENSE](https://github.com/Glint-Lang/Glint?tab=MIT-1-ov-file) for details.
 
 
 

@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
-    character::complete::{digit1, multispace0, multispace1},
+    character::complete::{digit1, multispace0, multispace1, char},
     combinator::{map, map_res, opt, recognize},
     multi::{many0, separated_list0},
     sequence::{delimited, preceded, separated_pair, tuple},
@@ -18,6 +18,11 @@ pub fn string_literal(input: &str) -> IResult<&str, AST> {
     map(parse_str, |s: &str| AST::String(s.to_string()))(input)
 }
 
+pub fn name(input: &str) -> IResult<&str, AST> {
+    let parse_str = delimited(tag("\""), take_while(|c| c != ' '), tag("\""));
+    map(parse_str, |s: &str| AST::String(s.to_string()))(input)
+}
+
 // Parsing an identifier.
 pub fn identifier(input: &str) -> IResult<&str, AST> {
     map(take_while1(|c: char| c.is_alphanumeric() || c == '_'), |id: &str| {
@@ -29,6 +34,7 @@ pub fn identifier(input: &str) -> IResult<&str, AST> {
 pub fn integer(input: &str) -> IResult<&str, AST> {
     map(map_res(digit1, |s: &str| i32::from_str(s)), AST::Integer)(input)
 }
+
 
 // Parsing a float literal.
 pub fn float(input: &str) -> IResult<&str, AST> {
@@ -63,7 +69,6 @@ pub fn array_literal(input: &str) -> IResult<&str, AST> {
     let (input, _) = preceded(multispace0, tag("]"))(input)?;
     Ok((input, AST::Array(elements)))
 }
-
 // Parsing a dictionary literal.
 pub fn dictionary_literal(input: &str) -> IResult<&str, AST> {
     let (input, _) = tag("{")(input)?;
@@ -171,6 +176,48 @@ pub fn comparison_expression(input: &str) -> IResult<&str, AST> {
     Ok((input, acc))
 }
 
+
+fn parse_arguments(input: &str) -> IResult<&str, Vec<AST>> {
+    let (input, args) = delimited(
+        char('('),
+        separated_list0(
+            preceded(multispace0, char(',')),
+            preceded(multispace0, identifier)
+        ),
+        char(')')
+    )(input)?;
+
+    Ok((input, args))
+}
+pub fn function(input: &str) -> IResult<&str, AST> {
+    // Parse the name and arguments
+    let (input, (name, args)) = tuple((
+        take_while1(|c: char| c.is_alphanumeric() || c == '_'),
+        preceded(multispace0, parse_arguments)
+    ))(input)?;
+
+    // Ignore any whitespace between the name with arguments and the opening brace
+    let (input, _) = multispace0(input)?;
+    let (input, _) = char('{')(input)?;
+
+    // Parse the contents of the block
+    let (input, elements) = many0(preceded(multispace0, statement))(input)?;
+
+    // Ignore any whitespace between the block contents and the closing brace
+    let (input, _) = delimited(multispace0, char('}'), multispace0)(input)?;
+
+    // Construct the AST with the function name, arguments, and body
+    Ok((input, AST::Function {
+        name: name.to_string(),
+        args: Box::new(AST::FunctionArgs(args)),  // Use Box<AST> here
+        body: Box::new(AST::Block(elements)),
+    }))
+}
+
+
+
+
+
 // Parsing a coincide statement.
 pub fn coincide(input: &str) -> IResult<&str, AST> {
     let (input, _) = tag("coincide")(input)?;
@@ -251,37 +298,7 @@ pub fn if_else(input: &str) -> IResult<&str, AST> {
     }))
 }
 
-// Parsing a function definition.
-pub fn function(input: &str) -> IResult<&str, AST> {
-    let (input, _) = tag("function")(input)?;
-    let (input, _) = multispace1(input)?;
-    let (input, name) = identifier(input)?;
-    let (input, args) = delimited(
-        tag("("),
-        separated_list0(
-            preceded(multispace0, tag(",")),
-            preceded(multispace0, map(identifier, |id| {
-                if let AST::Identifier(ref id) = id {
-                    id.clone()
-                } else {
-                    unreachable!()
-                }
-            }))
-        ),
-        tag(")")
-    )(input)?;
-    let (input, _) = tag(":")(input)?;
-    let (input, _) = multispace1(input)?;
-    let (input, body) = statement(input)?;
-    Ok((input, AST::Function {
-        name: match name {
-            AST::Identifier(id) => id,
-            _ => unreachable!(),
-        },
-        args,
-        body: Box::new(body),
-    }))
-}
+
 
 // Parsing a variable assignment.
 pub fn variable_assign(input: &str) -> IResult<&str, AST> {
@@ -306,15 +323,16 @@ pub fn variable_assign(input: &str) -> IResult<&str, AST> {
 
 // Parsing a statement (includes all possible statements).
 pub fn statement(input: &str) -> IResult<&str, AST> {
-    alt((
-        function,
+    preceded(multispace0, alt((
         return_stmt,
         write_stmt,
         variable_assign,
+        function,
         if_else,
         coincide,
-    ))(input)
+    )))(input)
 }
+
 
 // Parsing a program (a series of statements).
 pub fn program(input: &str) -> IResult<&str, Vec<AST>> {

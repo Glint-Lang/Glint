@@ -6,3 +6,5 @@ pub mod parser;
 
 // This module declaration includes the error definitions.
 pub mod error;
+
+pub mod interpreter;

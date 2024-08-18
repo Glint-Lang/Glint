@@ -2,12 +2,13 @@ use std::env;
 use std::fs;
 use std::time::Instant;
 use peak_alloc::PeakAlloc;
-use serde_cbor;
 use Glint::ast::AST;
 use Glint::error::ParseError;
 use Glint::parser::parse_program;
+use Glint::interpreter::Interpreter;
 use sysinfo::System;
 use colored::Colorize;
+use serde_json; // Add this import
 
 #[global_allocator]
 static PEAK_ALLOC: PeakAlloc = PeakAlloc;
@@ -93,11 +94,14 @@ fn main() {
 
                 match parse_program(&input) {
                     Ok(ast) => {
-                        let cbor = serde_cbor::to_vec(&ast).unwrap();
-                        println!("CBOR: {:?}", cbor);
+                        // Serialize the AST to a JSON string
+                        let ast_json = serde_json::to_string_pretty(&ast).expect("Failed to serialize AST");
+                        println!("Deserialized AST:");
+                        println!("{}", ast_json);
 
-                        let deserialized_ast: AST = serde_cbor::from_slice(&cbor).unwrap();
-                        println!("{:#?}", deserialized_ast);
+                        // Execute the AST using the interpreter
+                        let mut interpreter = Interpreter::new();
+                        interpreter.interpret(ast);
                     }
                     Err(ParseError::UnknownToken { token, line }) => {
                         eprintln!("Unknown token '{}' on line {}", token, line);
