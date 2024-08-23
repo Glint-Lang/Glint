@@ -34,7 +34,7 @@ To begin using Glint:
    ```
 
 ### Documentation
-Explore the Glint documentation [here](I'm_almost_done_with_it,_sorry).
+Explore the Glint documentation [here](https://glint.gitbook.io/glint).
 
 ### Examples
 Discover the simplicity and power of Glint with these examples:

@@ -1,3 +1,4 @@
+// main.rs
 use std::env;
 use std::fs;
 use std::time::Instant;
@@ -5,10 +6,11 @@ use peak_alloc::PeakAlloc;
 use Glint::ast::AST;
 use Glint::error::ParseError;
 use Glint::parser::parse_program;
-use Glint::interpreter::Interpreter;
+use Glint::interpreter::interpret_from_json;
 use sysinfo::System;
 use colored::Colorize;
-use serde_json; // Add this import
+use serde_json;
+use serde_cbor;
 
 #[global_allocator]
 static PEAK_ALLOC: PeakAlloc = PeakAlloc;
@@ -96,12 +98,22 @@ fn main() {
                     Ok(ast) => {
                         // Serialize the AST to a JSON string
                         let ast_json = serde_json::to_string_pretty(&ast).expect("Failed to serialize AST");
-                        println!("Deserialized AST:");
-                        println!("{}", ast_json);
+                        // println!("Serialized AST:");
+                        // println!("{}", ast_json);
 
-                        // Execute the AST using the interpreter
-                        let mut interpreter = Interpreter::new();
-                        interpreter.interpret(ast);
+                        // Serialize the AST to CBOR format
+                        let ast_cbor = serde_cbor::to_vec(&ast).expect("Failed to serialize AST to CBOR");
+                        let deserialized_ast: AST = serde_cbor::from_slice(&ast_cbor).expect("Failed to deserialize CBOR");
+
+                        // println!("CBOR Deserialized AST (from CBOR):");
+                        // println!("{:?}", deserialized_ast);
+
+                        // Print the raw CBOR bytes for debugging if necessary
+                        // println!("CBOR Serialized AST (raw bytes): {:?}", ast_cbor);
+
+                        // println!("\n\nInterpreted:");
+                        // Call the interpreter function with the JSON string
+                        interpret_from_json(&ast_json);
                     }
                     Err(ParseError::UnknownToken { token, line }) => {
                         eprintln!("Unknown token '{}' on line {}", token, line);

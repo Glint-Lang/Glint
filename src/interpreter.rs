@@ -1,170 +1,249 @@
-use crate::ast::AST;
+use serde_json::{from_str, Value};
 use std::collections::HashMap;
 
-pub struct Interpreter {
-    variables: HashMap<String, AST>,
-    functions: HashMap<String, (Vec<String>, AST)>,
+struct Interpreter {
+    functions: HashMap<String, Function>,
+    program: Vec<Value>,
+}
+
+#[derive(Debug, Clone)]
+struct Function {
+    name: String,
+    args: Vec<String>,
+    body: Value,
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
+    /// 🆕 Initializes a new `Interpreter` with an empty function map and program list
+    fn new() -> Self {
         Self {
-            variables: HashMap::new(),
             functions: HashMap::new(),
+            program: Vec::new(),
         }
     }
 
-    pub fn interpret(&mut self, ast: AST) {
-        match ast {
-            AST::Program(statements) => {
-                for statement in statements {
-                    self.interpret(statement);
-                }
-            }
-            AST::Write(expr) => {
-                let evaluated_exprs = if let AST::Array(exprs) = *expr {
-                    exprs.into_iter().map(|e| self.evaluate(e)).collect::<Vec<_>>()
-                } else {
-                    vec![self.evaluate(*expr)]
-                };
+    /// ➕ Adds a new function to the `functions` map
+    fn add_function(&mut self, func: Function) {
+        self.functions.insert(func.name.clone(), func);
+    }
 
-                // Объединение всех значений в одну строку
-                let mut output = String::new();
-                for value in evaluated_exprs {
-                    output.push_str(&self.format_value(value));
+    /// 🎬 Interprets the loaded program by processing function calls and write statements
+    fn interpret(&self) {
+        // println!("Functions:");
+        // for func in self.functions.values() {
+        //     println!("{:?}", func);
+        // }
+
+        // println!("\nProgram output:");
+        for element in &self.program {
+            match element.get("FunctionCall") {
+                Some(call_obj) => {
+                    // 🎯 Processes a function call, but does not output the result
+                    self.process_function_call(call_obj.as_object().unwrap());
                 }
-                // Вывод объединенной строки
-                println!("{}", output);
-            }
-            AST::VariableAssign { name, value } => {
-                let evaluated_value = self.evaluate(*value);
-                self.variables.insert(name, evaluated_value);
-            }
-            AST::Return(expr) => {
-                let value = self.evaluate(*expr);
-                self.variables.insert("return".to_string(), value);
-            }
-            AST::BinaryOp { left, op, right } => {
-                let left_val = self.evaluate(*left);
-                let right_val = self.evaluate(*right);
-                self.apply_binary_op(left_val, op, right_val);
-            }
-            AST::Identifier(name) => {
-                if let Some(value) = self.variables.get(&name) {
-                    println!("{}", self.format_value(value.clone()));
-                } else {
-                    eprintln!("Undefined variable: {}", name);
-                }
-            }
-            AST::FunctionCall { name, args } => {
-                if let Some((params, body)) = self.functions.get(&name).cloned() {
-                    let mut interpreter = Interpreter::new();
-                    for (param, arg) in params.iter().zip(args) {
-                        let evaluated_arg = self.evaluate(arg);
-                        interpreter.variables.insert(param.clone(), evaluated_arg);
+                None => {
+                    if let Some(write_obj) = element.get("Write") {
+                        // ✍️ Processes a write statement to output text or a value
+                        self.process_write(write_obj.as_object().unwrap(), &HashMap::new());
                     }
-                    interpreter.interpret(body.clone());
-                    if let Some(return_value) = interpreter.variables.get("return") {
-                        self.variables.insert("return".to_string(), return_value.clone());
-                    }
-                } else {
-                    eprintln!("Undefined function: {}", name);
                 }
-            }
-            _ => {
-                eprintln!("Unsupported AST node: {:?}", ast);
             }
         }
     }
 
-    fn evaluate(&mut self, ast: AST) -> AST {
-        match ast {
-            AST::Identifier(name) => {
-                if let Some(value) = self.variables.get(&name) {
-                    value.clone()
-                } else {
-                    eprintln!("Undefined variable: {}", name);
-                    AST::Identifier(name)
-                }
-            }
-            AST::BinaryOp { left, op, right } => {
-                let left_val = self.evaluate(*left);
-                let right_val = self.evaluate(*right);
-                self.apply_binary_op(left_val, op, right_val)
-            }
-            AST::FunctionCall { name, args } => {
-                if let Some((params, body)) = self.functions.get(&name).cloned() {
-                    let mut new_scope = Interpreter::new();
-                    for (param, arg) in params.iter().zip(args) {
-                        let evaluated_arg = self.evaluate(arg);
-                        new_scope.variables.insert(param.clone(), evaluated_arg);
-                    }
-                    new_scope.interpret(body.clone());
-                    if let Some(return_value) = new_scope.variables.get("return") {
-                        return_value.clone()
+    /// 🖋️ Handles the `Write` statement, which can be a string, identifier, integer, binary operation, or function call
+    fn process_write(&self, write_obj: &serde_json::Map<String, Value>, arg_map: &HashMap<String, Value>) {
+        match write_obj.get("String") {
+            Some(string_val) => println!("{}", string_val.as_str().unwrap()), // 📝 Outputs a string
+            None => match write_obj.get("Identifier") {
+                Some(identifier) => {
+                    let id_str = identifier.as_str().unwrap();
+                    if let Some(val) = arg_map.get(id_str) {
+                        println!("{}", self.extract_value(val)); // 🔎 Resolves and prints the value of an identifier
                     } else {
-                        AST::Bool(false)
+                        println!("Identifier '{}' not found", id_str); // 🚫 Identifier not found in the argument map
                     }
-                } else {
-                    eprintln!("Undefined function: {}", name);
-                    AST::Bool(false)
                 }
-            }
-            _ => ast,
+                None => match write_obj.get("Integer") {
+                    Some(integer_val) => println!("{}", integer_val.as_i64().unwrap()), // 🔢 Outputs an integer value
+                    None => match write_obj.get("BinaryOp") {
+                        Some(binary_op) => {
+                            // ➕ Processes and evaluates a binary operation
+                            let result = self.evaluate_binary_op(binary_op, arg_map);
+                        }
+                        None => match write_obj.get("FunctionCall") {
+                            Some(call_obj) => {
+                                // 🎯 Executes a function and outputs its result
+                                let result = self.process_function_call(call_obj.as_object().unwrap());
+                                println!("{}", result);
+                            }
+                            None => println!("Unknown data type"), // ❓ Unrecognized write statement type
+                        },
+                    },
+                },
+            },
         }
     }
 
-    fn apply_binary_op(&self, left: AST, op: String, right: AST) -> AST {
-        match op.as_str() {
-            "+" | "-" | "*" | "/" => {
-                match (self.coerce_to_float(left.clone()), self.coerce_to_float(right.clone())) {
-                    (AST::Float(l), AST::Float(r)) => match op.as_str() {
-                        "+" => AST::Float(l + r),
-                        "-" => AST::Float(l - r),
-                        "*" => AST::Float(l * r),
-                        "/" => AST::Float(l / r),
-                        _ => AST::Bool(false),  // This should never happen
-                    },
-                    _ => AST::Bool(false),  // Error if unable to coerce types
+    /// 📞 Processes a function call and returns its result
+    fn process_function_call(&self, call_obj: &serde_json::Map<String, Value>) -> i64 {
+        if let Some(name) = call_obj.get("name").and_then(Value::as_str) {
+            if let Some(func) = self.functions.get(name) {
+                let args = call_obj["args"].as_array().unwrap();
+                if args.len() == func.args.len() {
+                    let arg_map: HashMap<String, Value> = func.args.iter().cloned()
+                        .zip(args.iter().cloned()).collect();
+                    return self.execute_function_body(&func.body, &arg_map); // 🛠️ Executes the function body
+                } else {
+                    println!("Error: Function '{}' expects {} arguments but {} were provided", name, func.args.len(), args.len()); // ⚠️ Argument mismatch error
+                }
+            } else {
+                println!("Function '{}' not found", name); // 🔍 Function not found in the map
+            }
+        }
+        0 // 🅾️ Returns zero if the function call could not be processed
+    }
+
+    /// 🛠️ Executes the body of a function and returns a result (if any)
+    fn execute_function_body(&self, body: &Value, arg_map: &HashMap<String, Value>) -> i64 {
+        let mut return_value: Option<i64> = None;
+
+        if let Some(block) = body.get("Block").and_then(Value::as_array) {
+            for statement in block {
+                if let Some(write_obj) = statement.get("Write") {
+                    self.process_write(write_obj.as_object().unwrap(), arg_map); // 🖋️ Processes write statements in the function body
+                } else if let Some(return_obj) = statement.get("Return") {
+                    return_value = Some(self.process_return(return_obj.as_object().unwrap(), arg_map)); // ↩️ Processes return statements
+                }
+            }
+        }
+
+        return_value.unwrap_or(0) // Returns the result or defaults to zero if no return statement was found
+    }
+
+    /// ↩️ Processes the `Return` statement and extracts the value to be returned
+    fn process_return(&self, return_obj: &serde_json::Map<String, Value>, arg_map: &HashMap<String, Value>) -> i64 {
+        if let Some(identifier) = return_obj.get("Identifier") {
+            if let Some(val) = arg_map.get(identifier.as_str().unwrap()) {
+                self.extract_value(val).as_i64().unwrap() // 🧲 Resolves the identifier and returns its value
+            } else {
+                println!("Return identifier '{}' not found", identifier.as_str().unwrap()); // 🚫 Return identifier not found
+                0
+            }
+        } else if let Some(binary_op) = return_obj.get("BinaryOp") {
+            self.evaluate_binary_op(binary_op, arg_map).as_i64().unwrap() // ➕ Evaluates a binary operation and returns the result
+        } else {
+            println!("Unknown return type"); // ❓ Unrecognized return type
+            0
+        }
+    }
+
+    /// ➕ Evaluates a binary operation (e.g., addition, subtraction, multiplication, division)
+    fn evaluate_binary_op(&self, binary_op: &Value, arg_map: &HashMap<String, Value>) -> Value {
+        let left = self.resolve_value(&binary_op["left"], arg_map);
+        let right = self.resolve_value(&binary_op["right"], arg_map);
+        let op = binary_op["op"].as_str().unwrap();
+
+        match op {
+            "+" => {
+                if let (Some(left_int), Some(right_int)) = (left.as_i64(), right.as_i64()) {
+                    Value::Number((left_int + right_int).into()) // ➕ Adds two integers
+                } else {
+                    println!("BinaryOp error: one of the operands is not an integer."); // ⚠️ Operand type error
+                    Value::Null
+                }
+            }
+            "-" => {
+                if let (Some(left_int), Some(right_int)) = (left.as_i64(), right.as_i64()) {
+                    Value::Number((left_int - right_int).into()) // ➖ Subtracts two integers
+                } else {
+                    println!("BinaryOp error: one of the operands is not an integer."); // ⚠️ Operand type error
+                    Value::Null
+                }
+            }
+            "*" => {
+                if let (Some(left_int), Some(right_int)) = (left.as_i64(), right.as_i64()) {
+                    Value::Number((left_int * right_int).into()) // ✖️ Multiplies two integers
+                } else {
+                    println!("BinaryOp error: one of the operands is not an integer."); // ⚠️ Operand type error
+                    Value::Null
+                }
+            }
+            "/" => {
+                if let (Some(left_int), Some(right_int)) = (left.as_i64(), right.as_i64()) {
+                    if right_int != 0 {
+                        Value::Number((left_int / right_int).into()) // ➗ Divides two integers
+                    } else {
+                        println!("Error: Division by zero"); // 🚫 Division by zero error
+                        Value::Null
+                    }
+                } else {
+                    println!("BinaryOp error: one of the operands is not an integer."); // ⚠️ Operand type error
+                    Value::Null
                 }
             }
             _ => {
-                eprintln!("Unsupported binary operation: {:?} {} {:?}", left, op, right);
-                AST::Bool(false)
+                println!("Unknown binary operator: {}", op); // ❓ Unrecognized binary operator
+                Value::Null
             }
         }
     }
 
-    fn coerce_to_float(&self, value: AST) -> AST {
-        match value {
-            AST::Integer(i) => AST::Float(i as f64),
-            AST::Float(f) => AST::Float(f),
-            _ => value,
+    /// 🔍 Resolves a value from an identifier, string, integer, or binary operation
+    fn resolve_value(&self, value: &Value, arg_map: &HashMap<String, Value>) -> Value {
+        if let Some(identifier) = value.as_object().and_then(|v| v.get("Identifier")) {
+            if let Some(val) = arg_map.get(identifier.as_str().unwrap()) {
+                self.extract_value(val) // 🧲 Resolves the identifier to its actual value
+            } else {
+                println!("Identifier '{}' not found", identifier.as_str().unwrap()); // 🚫 Identifier not found
+                Value::Null
+            }
+        } else if value.is_string() || value.is_number() {
+            value.clone() // 📝 Returns the value directly if it's a string or number
+        } else if let Some(binary_op) = value.as_object().and_then(|v| v.get("BinaryOp")) {
+            self.evaluate_binary_op(binary_op, arg_map) // ➕ Processes and returns the result of a binary operation
+        } else {
+            Value::Null
         }
     }
 
-    fn format_value(&self, ast: AST) -> String {
-        match ast {
-            AST::Integer(i) => i.to_string(),
-            AST::Float(f) => f.to_string(),
-            AST::Bool(b) => b.to_string(),
-            AST::String(s) => s,
-            AST::Array(elements) => {
-                let formatted_elements: Vec<String> = elements.into_iter().map(|e| self.format_value(e)).collect();
-                format!("[{}]", formatted_elements.join(","))
-            }
-            AST::Dictionary(pairs) => {
-                let formatted_pairs: Vec<String> = pairs.into_iter()
-                    .map(|(key, value)| format!("{}: {}", self.format_value(key), self.format_value(value)))
-                    .collect();
-                format!("{{{}}}", formatted_pairs.join(", "))
-            }
-            AST::Tuple(elements) => {
-                let formatted_elements: Vec<String> = elements.into_iter().map(|e| self.format_value(e)).collect();
-                format!("({})", formatted_elements.join(", "))
-            }
-            _ => "Unsupported value".to_string(),
+    /// 🧲 Extracts the actual value from a `Value` type (e.g., Integer, String)
+    fn extract_value(&self, value: &Value) -> Value {
+        if let Some(integer) = value.get("Integer") {
+            Value::Number(integer.as_i64().unwrap().into()) // 🔢 Extracts an integer value
+        } else if let Some(string) = value.get("String") {
+            Value::String(string.as_str().unwrap().to_string()) // 📝 Extracts a string value
+        } else {
+            value.clone() // 📝 Returns the value as-is if it's neither an integer nor a string
+        }
+    }
+
+    /// 📂 Loads the program and functions from a JSON string
+    fn load_from_json(&mut self, json_str: &str) {
+        let data: Value = from_str(json_str).unwrap();
+        self.program = data["Program"].as_array().unwrap().to_vec(); // 📦 Loads the program array from JSON
+
+        let functions: Vec<Function> = self.program.iter()
+            .filter_map(|element| element.get("Function").map(|func_obj| {
+                Function {
+                    name: func_obj["name"].as_str().unwrap().to_string(), // 🔍 Extracts the function name
+                    args: func_obj["args"]["FunctionArgs"].as_array().unwrap().iter()
+                        .map(|arg| arg["Identifier"].as_str().unwrap().to_string())
+                        .collect(), // 📝 Collects the function arguments
+                    body: func_obj["body"].clone(), // 📦 Copies the function body
+                }
+            }))
+            .collect();
+
+        for func in functions {
+            self.add_function(func); // ➕ Adds each function to the interpreter
         }
     }
 }
 
+/// 🎬 Entry point: Initializes the interpreter and runs the program from a JSON string
+pub fn interpret_from_json(json_str: &str) {
+    let mut interpreter = Interpreter::new();
+    interpreter.load_from_json(json_str); // 📂 Loads the program from JSON
+    interpreter.interpret(); // 🎬 Interprets and executes the program
+}

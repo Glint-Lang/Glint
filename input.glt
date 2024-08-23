@@ -1,7 +1,12 @@
-Name(a, b) {
+fn(a, b) {
+    write 15
+    write "OSDOSAD"
     write 0
-    x is 15
-    write 52
+    write a + b
+    write a
+    write b
+    return a + b
 }
 
-write 3
+write "z"
+write fn(4, 4)
