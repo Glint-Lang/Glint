@@ -1,12 +1,5 @@
-fn(a, b) {
-    write 15
-    write "OSDOSAD"
+if 2 = 2 {
     write 0
-    write a + b
-    write a
-    write b
-    return a + b
+} else {
+    write 1
 }
-
-write "z"
-write fn(4, 4)

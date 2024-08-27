@@ -14,7 +14,7 @@ struct Function {
 }
 
 impl Interpreter {
-    /// 🆕 Initializes a new `Interpreter` with an empty function map and program list
+    /// 🆕 Initializes a new Interpreter with an empty function map and program list
     fn new() -> Self {
         Self {
             functions: HashMap::new(),
@@ -22,7 +22,7 @@ impl Interpreter {
         }
     }
 
-    /// ➕ Adds a new function to the `functions` map
+    /// ➕ Adds a new function to the functions map
     fn add_function(&mut self, func: Function) {
         self.functions.insert(func.name.clone(), func);
     }
@@ -51,39 +51,32 @@ impl Interpreter {
         }
     }
 
-    /// 🖋️ Handles the `Write` statement, which can be a string, identifier, integer, binary operation, or function call
+    /// 🖋️ Handles the Write statement, which can be a string, identifier, integer, or function call
     fn process_write(&self, write_obj: &serde_json::Map<String, Value>, arg_map: &HashMap<String, Value>) {
-        match write_obj.get("String") {
-            Some(string_val) => println!("{}", string_val.as_str().unwrap()), // 📝 Outputs a string
-            None => match write_obj.get("Identifier") {
-                Some(identifier) => {
-                    let id_str = identifier.as_str().unwrap();
-                    if let Some(val) = arg_map.get(id_str) {
-                        println!("{}", self.extract_value(val)); // 🔎 Resolves and prints the value of an identifier
-                    } else {
-                        println!("Identifier '{}' not found", id_str); // 🚫 Identifier not found in the argument map
-                    }
-                }
-                None => match write_obj.get("Integer") {
-                    Some(integer_val) => println!("{}", integer_val.as_i64().unwrap()), // 🔢 Outputs an integer value
-                    None => match write_obj.get("BinaryOp") {
-                        Some(binary_op) => {
-                            // ➕ Processes and evaluates a binary operation
-                            let result = self.evaluate_binary_op(binary_op, arg_map);
-                        }
-                        None => match write_obj.get("FunctionCall") {
-                            Some(call_obj) => {
-                                // 🎯 Executes a function and outputs its result
-                                let result = self.process_function_call(call_obj.as_object().unwrap());
-                                println!("{}", result);
-                            }
-                            None => println!("Unknown data type"), // ❓ Unrecognized write statement type
-                        },
-                    },
-                },
-            },
+        if let Some(binary_op) = write_obj.get("BinaryOp") {
+            // If the Write statement contains a BinaryOp, evaluate it
+            let result = self.evaluate_binary_op(binary_op, arg_map);
+            println!("{}", result.as_i64().unwrap()); // Output the result of the binary operation
+        } else if let Some(string_val) = write_obj.get("String") {
+            println!("{}", string_val.as_str().unwrap()); // Output a string
+        } else if let Some(identifier) = write_obj.get("Identifier") {
+            let id_str = identifier.as_str().unwrap();
+            if let Some(val) = arg_map.get(id_str) {
+                println!("{}", self.extract_value(val).as_i64().unwrap()); // Resolve and print the value of an identifier
+            } else {
+                println!("Identifier '{}' not found", id_str); // Identifier not found
+            }
+        } else if let Some(integer_val) = write_obj.get("Integer") {
+            println!("{}", integer_val.as_i64().unwrap()); // Output an integer value
+        } else if let Some(call_obj) = write_obj.get("FunctionCall") {
+            // Executes a function and outputs its result
+            let result = self.process_function_call(call_obj.as_object().unwrap());
+            println!("{}", result);
+        } else {
+            println!("Unknown data type in Write statement"); // Unrecognized write statement type
         }
     }
+
 
     /// 📞 Processes a function call and returns its result
     fn process_function_call(&self, call_obj: &serde_json::Map<String, Value>) -> i64 {
@@ -121,7 +114,7 @@ impl Interpreter {
         return_value.unwrap_or(0) // Returns the result or defaults to zero if no return statement was found
     }
 
-    /// ↩️ Processes the `Return` statement and extracts the value to be returned
+    /// ↩️ Processes the Return statement and extracts the value to be returned
     fn process_return(&self, return_obj: &serde_json::Map<String, Value>, arg_map: &HashMap<String, Value>) -> i64 {
         if let Some(identifier) = return_obj.get("Identifier") {
             if let Some(val) = arg_map.get(identifier.as_str().unwrap()) {
@@ -198,16 +191,17 @@ impl Interpreter {
                 println!("Identifier '{}' not found", identifier.as_str().unwrap()); // 🚫 Identifier not found
                 Value::Null
             }
-        } else if value.is_string() || value.is_number() {
-            value.clone() // 📝 Returns the value directly if it's a string or number
+        } else if let Some(integer_obj) = value.as_object().and_then(|v| v.get("Integer")) {
+            Value::Number(integer_obj.as_i64().unwrap().into()) // 🔢 Extracts and returns the integer directly
         } else if let Some(binary_op) = value.as_object().and_then(|v| v.get("BinaryOp")) {
             self.evaluate_binary_op(binary_op, arg_map) // ➕ Processes and returns the result of a binary operation
         } else {
+            println!("Unexpected value type: {:?}", value); // ⚠️ Unexpected type error
             Value::Null
         }
     }
 
-    /// 🧲 Extracts the actual value from a `Value` type (e.g., Integer, String)
+    /// 🧲 Extracts the actual value from a Value type (e.g., Integer, String)
     fn extract_value(&self, value: &Value) -> Value {
         if let Some(integer) = value.get("Integer") {
             Value::Number(integer.as_i64().unwrap().into()) // 🔢 Extracts an integer value

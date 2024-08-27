@@ -5,7 +5,7 @@
 Glint is a lightweight programming language designed for simplicity and performance. It combines both interpreter and compiler capabilities to cater to diverse programming needs.
 
 ### Features:
-- **Interpreted and Compiled:** Glint offers both interpreted and compiled modes. By using `use compiler` and `stop use compiler`, developers can opt for a compiled approach where the syntax includes braces `{}`, introduces typing, and addresses memory safety concerns—ideal for those requiring features typical of compiled languages.
+- **Interpreted and Compiled:** Glint offers both interpreted and compiled modes. By using `use compiler` and `stop use compiler`, developers can opt for a compiled appraoach where the syntax includes braces `{}`, introduces typing, and addresses memory safety concerns—ideal for those requiring features typical of compiled languages.
 
 - **Error Handling:** Glint provides robust error handling with clear feedback to aid debugging.
 

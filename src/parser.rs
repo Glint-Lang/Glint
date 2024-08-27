@@ -281,43 +281,58 @@ pub fn coincide(input: &str) -> IResult<&str, AST> {
 
 // Parsing an if-else statement.
 pub fn if_else(input: &str) -> IResult<&str, AST> {
+    // Parse the "if" keyword and the condition
     let (input, _) = tag("if")(input)?;
     let (input, _) = multispace1(input)?;
     let (input, condition) = comparison_expression(input)?;
-    let (input, _) = tag(":")(input)?;
-    let (input, _) = multispace1(input)?;
-    let (input, then_branch) = statement(input)?;
 
+    // Ignore whitespace and expect the opening brace for the block
+    let (input, _) = multispace0(input)?;
+    let (input, _) = char('{')(input)?;
+
+    // Parse the statements inside the block
+    let (input, then_branch) = many0(preceded(multispace0, statement))(input)?;
+
+    // Expect the closing brace for the block
+    let (input, _) = char('}')(input)?;
+
+    // Parse optional "else" or "elif" branches
     let mut elif_branches = vec![];
     let mut input = input;
 
     loop {
         let (i, _) = multispace0(input)?;
-        let (i, elif) = alt((tag("elif"), tag("else")))(i)?;
+        let (i, next_token) = opt(alt((tag("else"), tag("elif"))))(i)?;
 
-        if elif == "elif" {
-            let (i, _) = multispace1(i)?;
-            let (i, elif_condition) = comparison_expression(i)?;
-            let (i, _) = tag(":")(i)?;
-            let (i, _) = multispace1(i)?;
-            let (i, elif_branch) = statement(i)?;
-            elif_branches.push((elif_condition, elif_branch));
-            input = i;
-        } else if elif == "else" {
-            let (i, _) = tag(":")(i)?;
-            let (i, _) = multispace1(i)?;
-            let (i, else_branch) = statement(i)?;
-            return Ok((
-                i,
-                AST::IfElse {
-                    condition: Box::new(condition),
-                    then_branch: Box::new(then_branch),
-                    elif_branches,
-                    else_branch: Some(Box::new(else_branch)),
-                },
-            ));
-        } else {
-            break;
+        match next_token {
+            Some("elif") => {
+                // Parse "elif" condition and block
+                let (i, _) = multispace1(i)?;
+                let (i, elif_condition) = comparison_expression(i)?;
+                let (i, _) = multispace0(i)?;
+                let (i, _) = char('{')(i)?;
+                let (i, elif_branch) = many0(preceded(multispace0, statement))(i)?;
+                let (i, _) = char('}')(i)?;
+                elif_branches.push((elif_condition, AST::Block(elif_branch)));
+                input = i;
+            }
+            Some("else") => {
+                // Parse "else" block
+                let (i, _) = multispace0(i)?;
+                let (i, _) = char('{')(i)?;
+                let (i, else_branch) = many0(preceded(multispace0, statement))(i)?;
+                let (i, _) = char('}')(i)?;
+                return Ok((
+                    i,
+                    AST::IfElse {
+                        condition: Box::new(condition),
+                        then_branch: Box::new(AST::Block(then_branch)),
+                        elif_branches,
+                        else_branch: Some(Box::new(AST::Block(else_branch))),
+                    },
+                ));
+            }
+            _ => break,
         }
     }
 
@@ -325,12 +340,13 @@ pub fn if_else(input: &str) -> IResult<&str, AST> {
         input,
         AST::IfElse {
             condition: Box::new(condition),
-            then_branch: Box::new(then_branch),
+            then_branch: Box::new(AST::Block(then_branch)),
             elif_branches,
             else_branch: None,
         },
     ))
 }
+
 
 // Parsing a variable assignment.
 pub fn variable_assign(input: &str) -> IResult<&str, AST> {
