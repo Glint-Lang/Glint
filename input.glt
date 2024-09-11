@@ -1,5 +1,3 @@
-if 2 = 2 {
-    write 0
-} else {
-    write 1
-}
+x is 5
+y is 15
+write x + y

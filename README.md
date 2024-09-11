@@ -51,6 +51,43 @@ Discover the simplicity and power of Glint with these examples:
   write "Sum:", sum
   ```
 
+- **Simple Function:**
+  ```Glint
+  MyFunc(a, b) {
+    if a > b {
+        return true
+    } elif a = b {
+        write "a = b!"
+        return true
+    } else {
+        return false
+    }
+  }
+  ```
+
+- **Simple compile + interpreter combination:**
+  ```Glint
+  array is [1, 2, 3, 4, 5]
+  write "Lets go!"
+  
+  "use compile"
+  Array(arr: Array) -> int8 {
+    for i in array {
+        write i
+    }
+  }
+  "stop compile"
+  
+  Array(array)
+  
+  # output:
+  # 1
+  # 2
+  # 3
+  # 4
+  # 5
+  ```
+
 ### Contributing
 Contributions to Glint are welcome! Fork the repository and submit pull requests.
 

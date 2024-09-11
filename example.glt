@@ -1,5 +1,0 @@
-function example(a, b):
-    return a + b
-
-x is example(4, 4)
-write x
