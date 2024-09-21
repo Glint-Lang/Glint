@@ -9,6 +9,7 @@ dependencies = [
  "ciborium",
  "colored",
  "nom",
+ "os_info",
  "peak_alloc",
  "serde",
  "serde_cbor",
@@ -57,7 +58,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cbf2150cce219b664a8a70df7a1f933836724b503f8a413af9365b4dcc4d90b8"
 dependencies = [
  "lazy_static",
- "windows-sys",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -138,6 +139,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
+name = "log"
+version = "0.4.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+
+[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -166,6 +173,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8a3895c6391c39d7fe7ebc444a87eb2991b2a0bc718fdabd071eec617fc68e4"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "os_info"
+version = "3.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae99c7fa6dd38c7cafe1ec085e804f8f555a2f8659b0dbe03f1f9963a9b51092"
+dependencies = [
+ "log",
+ "serde",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -373,6 +391,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9"
 dependencies = [
  "windows-targets 0.48.5",
+]
+
+[[package]]
+name = "windows-sys"
+version = "0.52.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
+dependencies = [
+ "windows-targets 0.52.6",
 ]
 
 [[package]]

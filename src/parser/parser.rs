@@ -147,15 +147,19 @@ pub fn return_stmt(input: &str) -> IResult<&str, AST> {
 pub fn write_stmt(input: &str) -> IResult<&str, AST> {
     let (input, _) = tag("write")(input)?;
     let (input, _) = multispace1(input)?;
-    let (input, expr) = alt((
-        function_call,  // Теперь парсер может распознать вызов функции
-        math_expression,
-        string_literal,
-        array_literal,
-        dictionary_literal,
-    ))(input)?;
-    Ok((input, AST::Write(Box::new(expr))))
+    // Парсим список выражений, разделённых запятыми
+    let (input, expr_list) = separated_list0(
+        preceded(multispace0, tag(",")),
+        preceded(multispace0, alt((
+            function_call,  // Вызов функции
+            math_expression,
+            string_literal,
+            identifier,  // Поддержка идентификаторов (например, переменных)
+        )))
+    )(input)?;
+    Ok((input, AST::Write(expr_list)))
 }
+
 
 
 

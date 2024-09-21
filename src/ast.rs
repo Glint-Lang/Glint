@@ -22,8 +22,9 @@ pub enum AST {
     // 🔙 A return statement with an expression
     Return(Box<AST>),
 
-    // ✍️ A write operation with an expression
-    Write(Box<AST>),
+    // ✍️ A write operation with a list of expressions
+    Write(Vec<AST>),
+
 
     // ➕ A binary operation with left operand, operator, and right operand
     BinaryOp {

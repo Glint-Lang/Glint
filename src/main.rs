@@ -1,16 +1,16 @@
-// main.rs
+use colored::Colorize;
+use peak_alloc::PeakAlloc;
+use serde_cbor;
+use serde_json;
 use std::env;
 use std::fs;
 use std::time::Instant;
-use peak_alloc::PeakAlloc;
+use sysinfo::System;
 use Glint::ast::AST;
 use Glint::error::ParseError;
-use Glint::parser::parse_program;
-use Glint::interpreter::interpret_from_json;
-use sysinfo::System;
-use colored::Colorize;
-use serde_json;
-use serde_cbor;
+use Glint::interpreter::interpreter::interpret_from_json;
+use Glint::parser::parser::parse_program;
+use os_info;
 
 #[global_allocator]
 static PEAK_ALLOC: PeakAlloc = PeakAlloc; // 🚀 Custom global allocator for memory tracking
@@ -47,13 +47,31 @@ fn print_dev_info(start_time: Instant) {
     let elapsed_secs = elapsed.as_secs_f64();
     let peak_mem_gb = PEAK_ALLOC.peak_usage_as_gb();
     let current_mem_mb = PEAK_ALLOC.current_usage_as_mb();
+    let os_info = os_info::get();
 
     println!("{} Dev Info {}", "<=> ".blue(), " <=>".blue());
-    println!("{}: {:.4}s", "Elapsed time".truecolor(41, 176, 255), elapsed_secs);
+    println!(
+        "{}: {:.4}s",
+        "Elapsed time".truecolor(41, 176, 255),
+        elapsed_secs
+    );
     println!("{}:", "Resource consumption".truecolor(0, 76, 120));
-    println!("  └─ {}: {:.4} MB", "RAM Usage".truecolor(41, 176, 255), current_mem_mb);
-    println!("  └─ {}: {:.4} GB", "Peak RAM Usage".truecolor(41, 176, 255), peak_mem_gb);
-    println!("  └─ {}: {:?}", "OS".truecolor(41, 176, 255), System::os_version());
+    println!(
+        "  └─ {}: {:.4} MB",
+        "RAM Usage".truecolor(41, 176, 255),
+        current_mem_mb
+    );
+    println!(
+        "  └─ {}: {:.4} GB",
+        "Peak RAM Usage".truecolor(41, 176, 255),
+        peak_mem_gb
+    );
+    println!(
+        "  └─ {}: {:?} {:?}",
+        "OS".truecolor(41, 176, 255),
+        os_info.os_type(),
+        System::os_version()
+    );
     println!("{} End Dev Info {}", "<=> ".blue(), " <=>".blue());
 }
 
@@ -103,11 +121,14 @@ fn main() {
                 match parse_program(&input) {
                     Ok(ast) => {
                         // 🧩 Serialize the AST to a JSON string
-                        let ast_json = serde_json::to_string_pretty(&ast).expect("Failed to serialize AST");
+                        let ast_json =
+                            serde_json::to_string_pretty(&ast).expect("Failed to serialize AST");
 
                         // 🧩 Serialize the AST to CBOR format
-                        let ast_cbor = serde_cbor::to_vec(&ast).expect("Failed to serialize AST to CBOR");
-                        let deserialized_ast: AST = serde_cbor::from_slice(&ast_cbor).expect("Failed to deserialize CBOR");
+                        let ast_cbor =
+                            serde_cbor::to_vec(&ast).expect("Failed to serialize AST to CBOR");
+                        let deserialized_ast: AST =
+                            serde_cbor::from_slice(&ast_cbor).expect("Failed to deserialize CBOR");
 
                         println!("{}", ast_json);
                         // 🧠 Call the interpreter function with the JSON string
