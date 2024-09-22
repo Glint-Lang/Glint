@@ -1,5 +1,9 @@
 func(a, b) {
-    return a + b
-}
+   return a + b
+ }
 
-write func(2, 2)
+ write func(2, 2)
+ write 2 + 234
+ x is 5
+ y is 5
+ write x + y

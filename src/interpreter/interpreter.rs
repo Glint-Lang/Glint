@@ -9,7 +9,6 @@ struct Interpreter {
     cache: HashMap<String, Value>,
 }
 
-
 #[derive(Debug, Clone)]
 struct Function {
     name: String,
@@ -51,7 +50,8 @@ impl Interpreter {
                 name,
                 func.args,
                 serde_json::to_string_pretty(&func.body).unwrap()
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         let program_len = self.program.len();
@@ -61,15 +61,13 @@ impl Interpreter {
             let function_call = element
                 .get("FunctionCall")
                 .map(|v| v.as_object().unwrap().clone());
-            let write_objs = element
-                .get("Write")
-                .map(|v| {
-                    if v.is_array() {
-                        v.as_array().unwrap().clone()
-                    } else {
-                        panic!("Expected 'Write' to be an array but got something else.");
-                    }
-                });
+            let write_objs = element.get("Write").map(|v| {
+                if v.is_array() {
+                    v.as_array().unwrap().clone()
+                } else {
+                    panic!("Expected 'Write' to be an array but got something else.");
+                }
+            });
             let var_assign = element
                 .get("VariableAssign")
                 .map(|v| v.as_object().unwrap().clone());
@@ -77,26 +75,21 @@ impl Interpreter {
             if let Some(call_obj) = function_call {
                 self.process_function_call(&call_obj);
             } else if let Some(write_array) = write_objs {
-                // Откроем строку для записи вывода
+                // Let's open a line to record the output
                 let mut output_line = String::new();
                 for write_elem in write_array {
                     if let Some(write_obj) = write_elem.as_object() {
-                        // Обработка каждого элемента массива Write
+                        // Processing of each element of the Write array
                         output_line.push_str(&self.process_write(write_obj, &HashMap::new()));
                     }
                 }
-                // Записываем строку сразу после всех элементов Write
+                // We write the line immediately after all the Write elements
                 writeln!(handle, "{}", output_line).unwrap();
             } else if let Some(var_assign) = var_assign {
                 self.process_variable_assign(&var_assign);
-            }}
+            }
+        }
     }
-
-
-
-
-
-
 
     /// ➕ Processes a variable assignment and adds it to the variables map
     fn process_variable_assign(&mut self, var_assign: &serde_json::Map<String, Value>) {
@@ -105,18 +98,19 @@ impl Interpreter {
         let var_name = var_assign.get("name").unwrap().as_str().unwrap();
         let var_value = var_assign.get("value").unwrap();
 
-        let cache_key = format!("VariableAssign:{:?}", var_assign); // Создание ключа для кэширования
+        let cache_key = format!("VariableAssign:{:?}", var_assign); // Creating a key for caching
 
         write!(handle, "{}\n", cache_key).unwrap();
 
         if let Some(cached_result) = self.cache.get(&cache_key) {
-            self.variables.insert(var_name.to_string(), cached_result.clone()); // Возвращаем значение из кэша
+            self.variables
+                .insert(var_name.to_string(), cached_result.clone()); // Returning the value from the cache
         } else {
-            self.variables.insert(var_name.to_string(), var_value.clone());
-            self.cache.insert(cache_key, var_value.clone()); // Кэширование переменной
+            self.variables
+                .insert(var_name.to_string(), var_value.clone());
+            self.cache.insert(cache_key, var_value.clone()); // Caching a variable
         }
     }
-
 
     /// 🖋️ Handles the Write statement, which can be a string, identifier, integer, function call, or binary operation
     fn process_write(
@@ -124,9 +118,9 @@ impl Interpreter {
         write_obj: &serde_json::Map<String, Value>,
         local_scope: &HashMap<String, Value>,
     ) -> String {
-        let cache_key = format!("{:?}", write_obj); // Создаем ключ для кэша
+        let cache_key = format!("{:?}", write_obj); // Creating a key for the cache
         if let Some(cached_result) = self.cache.get(&cache_key) {
-            return cached_result.as_str().unwrap().to_string(); // Возвращаем кэшированный результат
+            return cached_result.as_str().unwrap().to_string(); // Returning the cached result
         }
 
         let result = if let Some(binary_op) = write_obj.get("BinaryOp") {
@@ -136,7 +130,7 @@ impl Interpreter {
             string_val.as_str().unwrap().to_string()
         } else if let Some(identifier) = write_obj.get("Identifier") {
             let id_str = identifier.as_str().unwrap();
-            // Сначала проверим в локальной области видимости (если в функции)
+            // First, let's check in the local scope (if in the function)
             if let Some(val) = local_scope.get(id_str) {
                 let resolved_value = self.extract_value(val);
                 match resolved_value {
@@ -145,7 +139,7 @@ impl Interpreter {
                     _ => "Unsupported type".to_string(),
                 }
             } else if let Some(global_val) = self.variables.get(id_str) {
-                // Если не найдено в локальной области видимости, проверим глобальные переменные
+                // If it is not found in the local scope, check the global variables
                 let resolved_value = self.extract_value(global_val);
                 match resolved_value {
                     Value::Number(n) => n.to_string(),
@@ -164,28 +158,19 @@ impl Interpreter {
             "Unknown data type in Write statement".to_string()
         };
 
-        self.cache.insert(cache_key, Value::String(result.clone())); // Кэшируем результат
+        self.cache.insert(cache_key, Value::String(result.clone())); // Caching the result
         result
     }
-
-
-
-
-
-
-
-
-
 
     /// 📞 Processes a function call and returns its result
     fn process_function_call(&mut self, call_obj: &serde_json::Map<String, Value>) -> i64 {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
-        let cache_key = format!("{:?}", call_obj); // Создание ключа для кэширования
+        let cache_key = format!("{:?}", call_obj); // Creating a key for caching
         write!(handle, "{}\n", cache_key).unwrap();
 
         if let Some(cached_result) = self.cache.get(&cache_key) {
-            return cached_result.as_i64().unwrap(); // Возвращаем результат из кэша, если он есть
+            return cached_result.as_i64().unwrap(); // We return the result from the cache, if there is one
         }
 
         if let Some(name) = call_obj.get("name").and_then(Value::as_str) {
@@ -199,22 +184,24 @@ impl Interpreter {
                         .zip(args.iter().cloned())
                         .collect();
 
-                    // Создаем новый массив переменных для локальной области видимости функции
-                    let mut local_scope = self.variables.clone(); // Клонируем глобальные переменные
-                    local_scope.extend(arg_map.clone()); // Добавляем аргументы в локальную область видимости
+                    // Creating a new array of variables for the local scope of the function
+                    let mut local_scope = self.variables.clone(); // Cloning global variables
+                    local_scope.extend(arg_map.clone()); // Adding arguments to the local scope
 
-                    // Выполняем все команды из тела функции с локальной областью видимости
+                    // We execute all commands from the body of the function with a local scope
                     let result = self.execute_function_body(&func.body, &local_scope);
 
-                    self.cache.insert(cache_key, Value::Number(result.into())); // Кэширование результата
+                    self.cache.insert(cache_key, Value::Number(result.into())); // Caching the result
                     return result;
                 } else {
-                    write!(handle,
-                           "Error: Function '{}' expects {} arguments but {} were provided\n",
-                           name,
-                           func.args.len(),
-                           args.len()
-                    ).unwrap();
+                    write!(
+                        handle,
+                        "Error: Function '{}' expects {} arguments but {} were provided\n",
+                        name,
+                        func.args.len(),
+                        args.len()
+                    )
+                    .unwrap();
                 }
             } else {
                 write!(handle, "Function '{}' not found\n", name).unwrap();
@@ -223,24 +210,19 @@ impl Interpreter {
         0
     }
 
-
-
-
-
-
     /// 🛠️ Executes the body of a function and returns a result (if any)
     fn execute_function_body(&mut self, body: &Value, local_scope: &HashMap<String, Value>) -> i64 {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
-        let cache_key = format!("{:?}{:?}", body, local_scope); // Создание ключа для кэширования
+        let cache_key = format!("{:?}{:?}", body, local_scope);
         write!(handle, "{}\n", cache_key).unwrap();
 
         if let Some(cached_result) = self.cache.get(&cache_key) {
-            return cached_result.as_i64().unwrap(); // Возвращаем результат из кэша, если он есть
+            return cached_result.as_i64().unwrap();
         }
 
         let mut return_value: Option<i64> = None;
-        let mut current_scope = local_scope.clone(); // Создаем копию локальной области видимости
+        let mut current_scope = local_scope.clone();
 
         if let Some(block) = body.get("Block").and_then(Value::as_array) {
             for statement in block {
@@ -253,26 +235,35 @@ impl Interpreter {
                     }
                     writeln!(handle, "{}", output_line).unwrap();
                 }
-                if let Some(var_assign) = statement.get("VariableAssign").and_then(Value::as_object) {
+                if let Some(var_assign) = statement.get("VariableAssign").and_then(Value::as_object)
+                {
+                    // We use the existing process_variable_assign function to process
                     self.process_variable_assign(var_assign);
-                    // Обновляем локальные переменные
-                    let var_name = var_assign.get("name").unwrap().as_str().unwrap().to_string();
+                    let var_name = var_assign
+                        .get("name")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .to_string();
                     let var_value = var_assign.get("value").unwrap().clone();
                     current_scope.insert(var_name, var_value);
                 }
-                if let Some(return_obj) = statement.get("Return") {
-                    return_value = Some(self.process_return(return_obj.as_object().unwrap(), &current_scope));
+                if let Some(function_call) =
+                    statement.get("FunctionCall").and_then(Value::as_object)
+                {
+                    // We use the existing process_function_call function to process
+                    self.process_function_call(function_call);
+                }
+                if let Some(return_obj) = statement.get("Return").and_then(Value::as_object) {
+                    return_value = Some(self.process_return(return_obj, &current_scope));
                 }
             }
         }
 
         let result = return_value.unwrap_or(0);
-        self.cache.insert(cache_key, Value::Number(result.into())); // Кэширование результата
+        self.cache.insert(cache_key, Value::Number(result.into())); // Caching the result
         result
     }
-
-
-
 
     /// ↩️ Processes the Return statement and extracts the value to be returned
     fn process_return(
@@ -282,22 +273,24 @@ impl Interpreter {
     ) -> i64 {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
-        let cache_key = format!("Return:{:?}{:?}", return_obj, local_scope); // Создание ключа для кэширования
+        let cache_key = format!("Return:{:?}{:?}", return_obj, local_scope); // Creating a key for caching
 
         write!(handle, "{}\n", cache_key).unwrap();
 
         if let Some(cached_result) = self.cache.get(&cache_key) {
-            return cached_result.as_i64().unwrap(); // Возвращаем результат из кэша
+            return cached_result.as_i64().unwrap(); // Returning the result from the cache
         }
 
         let result = if let Some(identifier) = return_obj.get("Identifier") {
             if let Some(val) = local_scope.get(identifier.as_str().unwrap()) {
                 self.extract_value(val).as_i64().unwrap()
             } else {
-                write!(handle,
-                       "Return identifier '{}' not found\n",
-                       identifier.as_str().unwrap()
-                ).unwrap();
+                write!(
+                    handle,
+                    "Return identifier '{}' not found\n",
+                    identifier.as_str().unwrap()
+                )
+                .unwrap();
                 0
             }
         } else if let Some(binary_op) = return_obj.get("BinaryOp") {
@@ -309,14 +302,16 @@ impl Interpreter {
             0
         };
 
-        self.cache.insert(cache_key, Value::Number(result.into())); // Кэширование результата
+        self.cache.insert(cache_key, Value::Number(result.into())); // Caching the result
         result
     }
 
-
-
     /// ➕ Evaluates a binary operation (e.g., addition, subtraction, multiplication, division)
-    fn evaluate_binary_op(&mut self, binary_op: &Value, local_scope: &HashMap<String, Value>) -> Value {
+    fn evaluate_binary_op(
+        &mut self,
+        binary_op: &Value,
+        local_scope: &HashMap<String, Value>,
+    ) -> Value {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
         let left = self.resolve_value(&binary_op["left"], local_scope);
@@ -335,7 +330,11 @@ impl Interpreter {
                 if let (Some(left_int), Some(right_int)) = (left.as_i64(), right.as_i64()) {
                     Value::Number((left_int + right_int).into())
                 } else {
-                    write!(handle, "BinaryOp error: one of the operands is not an integer.\n").unwrap();
+                    write!(
+                        handle,
+                        "BinaryOp error: one of the operands is not an integer.\n"
+                    )
+                    .unwrap();
                     Value::Null
                 }
             }
@@ -343,7 +342,11 @@ impl Interpreter {
                 if let (Some(left_int), Some(right_int)) = (left.as_i64(), right.as_i64()) {
                     Value::Number((left_int - right_int).into())
                 } else {
-                    write!(handle, "BinaryOp error: one of the operands is not an integer.\n").unwrap();
+                    write!(
+                        handle,
+                        "BinaryOp error: one of the operands is not an integer.\n"
+                    )
+                    .unwrap();
                     Value::Null
                 }
             }
@@ -351,7 +354,11 @@ impl Interpreter {
                 if let (Some(left_int), Some(right_int)) = (left.as_i64(), right.as_i64()) {
                     Value::Number((left_int * right_int).into())
                 } else {
-                    write!(handle, "BinaryOp error: one of the operands is not an integer.\n").unwrap();
+                    write!(
+                        handle,
+                        "BinaryOp error: one of the operands is not an integer.\n"
+                    )
+                    .unwrap();
                     Value::Null
                 }
             }
@@ -364,7 +371,11 @@ impl Interpreter {
                         Value::Null
                     }
                 } else {
-                    write!(handle, "BinaryOp error: one of the operands is not an integer.\n").unwrap();
+                    write!(
+                        handle,
+                        "BinaryOp error: one of the operands is not an integer.\n"
+                    )
+                    .unwrap();
                     Value::Null
                 }
             }
@@ -386,13 +397,14 @@ impl Interpreter {
         if let Some(identifier) = value.as_object().and_then(|v| v.get("Identifier")) {
             let id_str = identifier.as_str().unwrap();
             if let Some(val) = local_scope.get(id_str) {
-                self.extract_value(val) // 🧲 Получаем значение переменной
+                self.extract_value(val) // 🧲 Getting the value of the variable
+            } else if let Some(global_val) = self.variables.get(id_str) {
+                self.extract_value(global_val) // 🧲 We get the value of the global variable
             } else {
-                write!(handle, "Identifier '{}' not found in local scope\n", id_str).unwrap();
+                write!(handle, "Identifier '{}' not found\n", id_str).unwrap();
                 Value::Null
             }
-        }
-        else if let Some(integer_obj) = value.as_object().and_then(|v| v.get("Integer")) {
+        } else if let Some(integer_obj) = value.as_object().and_then(|v| v.get("Integer")) {
             Value::Number(integer_obj.as_i64().unwrap().into()) // 🔢 Extracts and returns the integer directly
         } else if let Some(binary_op) = value.as_object().and_then(|v| v.get("BinaryOp")) {
             self.evaluate_binary_op(binary_op, local_scope) // ➕ Processes and returns the result of a binary operation
@@ -401,7 +413,6 @@ impl Interpreter {
             Value::Null
         }
     }
-
 
     /// 🧲 Extracts the actual value from a Value type (e.g., Integer, String, or other)
     fn extract_value(&self, value: &Value) -> Value {
@@ -455,11 +466,10 @@ impl Interpreter {
                     name,
                     serde_json::to_string_pretty(value).unwrap()
                 )
-                    .unwrap();
+                .unwrap();
             }
         }
     }
-
 }
 
 /// 🎬 Entry point: Initializes the interpreter and runs the program from a JSON string
