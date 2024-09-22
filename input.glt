@@ -1,1 +1,5 @@
-write 2 + 2
+func(a, b) {
+    return a + b
+}
+
+write func(2, 2)

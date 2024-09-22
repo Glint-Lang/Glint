@@ -118,7 +118,7 @@ impl Interpreter {
     }
 
 
-    /// 🖋️ Handles the Write statement, which can be a string, identifier, integer, or function call
+    /// 🖋️ Handles the Write statement, which can be a string, identifier, integer, function call, or binary operation
     fn process_write(
         &mut self,
         write_obj: &serde_json::Map<String, Value>,
@@ -136,8 +136,17 @@ impl Interpreter {
             string_val.as_str().unwrap().to_string()
         } else if let Some(identifier) = write_obj.get("Identifier") {
             let id_str = identifier.as_str().unwrap();
+            // Сначала проверим в локальной области видимости (если в функции)
             if let Some(val) = local_scope.get(id_str) {
                 let resolved_value = self.extract_value(val);
+                match resolved_value {
+                    Value::Number(n) => n.to_string(),
+                    Value::String(s) => s,
+                    _ => "Unsupported type".to_string(),
+                }
+            } else if let Some(global_val) = self.variables.get(id_str) {
+                // Если не найдено в локальной области видимости, проверим глобальные переменные
+                let resolved_value = self.extract_value(global_val);
                 match resolved_value {
                     Value::Number(n) => n.to_string(),
                     Value::String(s) => s,
@@ -148,6 +157,9 @@ impl Interpreter {
             }
         } else if let Some(integer_val) = write_obj.get("Integer") {
             integer_val.as_i64().unwrap().to_string()
+        } else if let Some(function_call) = write_obj.get("FunctionCall") {
+            let result = self.process_function_call(function_call.as_object().unwrap());
+            result.to_string()
         } else {
             "Unknown data type in Write statement".to_string()
         };
@@ -155,6 +167,12 @@ impl Interpreter {
         self.cache.insert(cache_key, Value::String(result.clone())); // Кэшируем результат
         result
     }
+
+
+
+
+
+
 
 
 
@@ -204,6 +222,7 @@ impl Interpreter {
         }
         0
     }
+
 
 
 
@@ -297,11 +316,11 @@ impl Interpreter {
 
 
     /// ➕ Evaluates a binary operation (e.g., addition, subtraction, multiplication, division)
-    fn evaluate_binary_op(&mut self, binary_op: &Value, arg_map: &HashMap<String, Value>) -> Value {
+    fn evaluate_binary_op(&mut self, binary_op: &Value, local_scope: &HashMap<String, Value>) -> Value {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
-        let left = self.resolve_value(&binary_op["left"], arg_map);
-        let right = self.resolve_value(&binary_op["right"], arg_map);
+        let left = self.resolve_value(&binary_op["left"], local_scope);
+        let right = self.resolve_value(&binary_op["right"], local_scope);
         let op = binary_op["op"].as_str().unwrap();
 
         let cache_key = format!("{:?} {} {:?}", left, op, right); // Creating a key for the cache
@@ -361,22 +380,22 @@ impl Interpreter {
     }
 
     /// 🔍 Resolves a value from an identifier, string, integer, or binary operation
-    fn resolve_value(&mut self, value: &Value, arg_map: &HashMap<String, Value>) -> Value {
+    fn resolve_value(&mut self, value: &Value, local_scope: &HashMap<String, Value>) -> Value {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
         if let Some(identifier) = value.as_object().and_then(|v| v.get("Identifier")) {
             let id_str = identifier.as_str().unwrap();
-            if let Some(val) = self.variables.get(id_str) {
+            if let Some(val) = local_scope.get(id_str) {
                 self.extract_value(val) // 🧲 Получаем значение переменной
             } else {
-                write!(handle, "Identifier '{}' not found\n", id_str).unwrap();
+                write!(handle, "Identifier '{}' not found in local scope\n", id_str).unwrap();
                 Value::Null
             }
         }
         else if let Some(integer_obj) = value.as_object().and_then(|v| v.get("Integer")) {
             Value::Number(integer_obj.as_i64().unwrap().into()) // 🔢 Extracts and returns the integer directly
         } else if let Some(binary_op) = value.as_object().and_then(|v| v.get("BinaryOp")) {
-            self.evaluate_binary_op(binary_op, arg_map) // ➕ Processes and returns the result of a binary operation
+            self.evaluate_binary_op(binary_op, local_scope) // ➕ Processes and returns the result of a binary operation
         } else {
             write!(handle, "Unexpected value type: {:?}\n", value).unwrap(); // ⚠️ Unexpected type error
             Value::Null
