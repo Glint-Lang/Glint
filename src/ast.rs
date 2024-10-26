@@ -63,14 +63,6 @@ pub enum AST {
         value: Box<AST>,
     },
 
-    // 🔄 An if-else conditional with condition, then branch, elif branches, and optional else branch
-    IfElse {
-        condition: Box<AST>,
-        then_branch: Box<AST>,
-        elif_branches: Vec<(AST, AST)>,
-        else_branch: Option<Box<AST>>,
-    },
-
     // 🎯 A switch-like expression with cases and an optional default case
     Coincide {
         expr: Box<AST>,
@@ -80,6 +72,13 @@ pub enum AST {
 
     // 🧱 A block of multiple AST nodes
     Block(Vec<AST>),
+
+    // 🧠 If-Else statement with condition, if-block, and optional else-block
+    IfElse {
+        condition: Box<AST>,
+        if_block: Box<AST>,
+        else_block: Option<Box<AST>>,
+    },
 
     // 📋 A list of function arguments
     FunctionArgs(Vec<AST>)

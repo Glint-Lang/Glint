@@ -166,7 +166,7 @@ pub fn write_stmt(input: &str) -> IResult<&str, AST> {
 // Parsing a comparison operator.
 pub fn comparison_operator(input: &str) -> IResult<&str, &str> {
     alt((
-        tag("="),
+        tag("="),    // Новый оператор для равенства
         tag("!="),
         tag("<="),
         tag(">="),
@@ -174,6 +174,7 @@ pub fn comparison_operator(input: &str) -> IResult<&str, &str> {
         tag(">"),
     ))(input)
 }
+
 
 // Parsing a comparison expression.
 pub fn comparison_expression(input: &str) -> IResult<&str, AST> {
@@ -283,73 +284,6 @@ pub fn coincide(input: &str) -> IResult<&str, AST> {
     ))
 }
 
-// Parsing an if-else statement.
-pub fn if_else(input: &str) -> IResult<&str, AST> {
-    // Parse the "if" keyword and the condition
-    let (input, _) = tag("if")(input)?;
-    let (input, _) = multispace1(input)?;
-    let (input, condition) = comparison_expression(input)?;
-
-    // Ignore whitespace and expect the opening brace for the block
-    let (input, _) = multispace0(input)?;
-    let (input, _) = char('{')(input)?;
-
-    // Parse the statements inside the block
-    let (input, then_branch) = many0(preceded(multispace0, statement))(input)?;
-
-    // Expect the closing brace for the block
-    let (input, _) = char('}')(input)?;
-
-    // Parse optional "else" or "elif" branches
-    let mut elif_branches = vec![];
-    let mut input = input;
-
-    loop {
-        let (i, _) = multispace0(input)?;
-        let (i, next_token) = opt(alt((tag("else"), tag("elif"))))(i)?;
-
-        match next_token {
-            Some("elif") => {
-                // Parse "elif" condition and block
-                let (i, _) = multispace1(i)?;
-                let (i, elif_condition) = comparison_expression(i)?;
-                let (i, _) = multispace0(i)?;
-                let (i, _) = char('{')(i)?;
-                let (i, elif_branch) = many0(preceded(multispace0, statement))(i)?;
-                let (i, _) = char('}')(i)?;
-                elif_branches.push((elif_condition, AST::Block(elif_branch)));
-                input = i;
-            }
-            Some("else") => {
-                // Parse "else" block
-                let (i, _) = multispace0(i)?;
-                let (i, _) = char('{')(i)?;
-                let (i, else_branch) = many0(preceded(multispace0, statement))(i)?;
-                let (i, _) = char('}')(i)?;
-                return Ok((
-                    i,
-                    AST::IfElse {
-                        condition: Box::new(condition),
-                        then_branch: Box::new(AST::Block(then_branch)),
-                        elif_branches,
-                        else_branch: Some(Box::new(AST::Block(else_branch))),
-                    },
-                ));
-            }
-            _ => break,
-        }
-    }
-
-    Ok((
-        input,
-        AST::IfElse {
-            condition: Box::new(condition),
-            then_branch: Box::new(AST::Block(then_branch)),
-            elif_branches,
-            else_branch: None,
-        },
-    ))
-}
 
 
 // Parsing a variable assignment.
@@ -385,12 +319,59 @@ pub fn statement(input: &str) -> IResult<&str, AST> {
             write_stmt,
             variable_assign,
             function,
-            function_call, // Added function call parsing
-            if_else,
+            if_else_stmt,
+            function_call,
             coincide,
         )),
     )(input)
 }
+
+
+
+
+
+pub fn if_else_stmt(input: &str) -> IResult<&str, AST> {
+    let (input, _) = tag("if")(input)?;
+    let (input, _) = multispace1(input)?;
+
+    // Парсим условие сравнения с использованием знака "="
+    let (input, condition) = comparison_expression(input)?;
+
+    // Парсим тело блока if
+    let (input, _) = multispace0(input)?;
+    let (input, _) = char('{')(input)?;
+    let (input, if_block) = many0(preceded(multispace0, statement))(input)?;
+    let (input, _) = multispace0(input)?;
+    let (input, _) = char('}')(input)?;
+
+    // Парсинг опционального блока else
+    let (input, else_block) = opt(preceded(
+        tuple((multispace0, tag("else"), multispace0, char('{'))),
+        many0(preceded(multispace0, statement))
+    ))(input)?;
+
+    let (input, _) = if else_block.is_some() {
+        let (input, _) = multispace0(input)?;
+        let (input, _) = char('}')(input)?;
+        (input, ())
+    } else {
+        (input, ())
+    };
+
+    // Преобразуем else_block в AST
+    let else_ast = else_block.map(|block| AST::Block(block));
+
+    Ok((
+        input,
+        AST::IfElse {
+            condition: Box::new(condition),
+            if_block: Box::new(AST::Block(if_block)),
+            else_block: else_ast.map(Box::new),
+        },
+    ))
+}
+
+
 
 // Parsing a program (a series of statements).
 pub fn program(input: &str) -> IResult<&str, Vec<AST>> {

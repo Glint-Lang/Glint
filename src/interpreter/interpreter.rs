@@ -32,11 +32,6 @@ impl Interpreter {
         self.functions.insert(func.name.clone(), func);
     }
 
-    /// ➕ Adds a new variable to the variables map
-    fn add_variable(&mut self, name: String, value: Value) {
-        self.variables.insert(name, value);
-    }
-
     /// 🎬 Interprets the loaded program by processing function calls and write statements
     fn interpret(&mut self) {
         let stdout = io::stdout();
@@ -51,16 +46,16 @@ impl Interpreter {
                 func.args,
                 serde_json::to_string_pretty(&func.body).unwrap()
             )
-            .unwrap();
+                .unwrap();
         }
 
         let program_len = self.program.len();
         for i in 0..program_len {
-            let element = &self.program[i];
+            let element = self.program[i].clone(); // Clone element to avoid borrowing conflicts
 
-            let function_call = element
-                .get("FunctionCall")
-                .map(|v| v.as_object().unwrap().clone());
+            // Process IfElse elements
+            self.process_if_else(&element);
+
             let write_objs = element.get("Write").map(|v| {
                 if v.is_array() {
                     v.as_array().unwrap().clone()
@@ -68,47 +63,121 @@ impl Interpreter {
                     panic!("Expected 'Write' to be an array but got something else.");
                 }
             });
-            let var_assign = element
-                .get("VariableAssign")
-                .map(|v| v.as_object().unwrap().clone());
 
-            if let Some(call_obj) = function_call {
-                self.process_function_call(&call_obj);
-            } else if let Some(write_array) = write_objs {
-                // Let's open a line to record the output
+            self.process_function_call(&element);
+
+            if let Some(write_array) = write_objs {
                 let mut output_line = String::new();
                 for write_elem in write_array {
                     if let Some(write_obj) = write_elem.as_object() {
-                        // Processing of each element of the Write array
                         output_line.push_str(&self.process_write(write_obj, &HashMap::new()));
                     }
                 }
-                // We write the line immediately after all the Write elements
                 writeln!(handle, "{}", output_line).unwrap();
-            } else if let Some(var_assign) = var_assign {
-                self.process_variable_assign(&var_assign);
+            } else {
+                self.process_variable_assign(&element);
             }
         }
     }
 
+
+    /// 🆕 Executes the entire block depending on the result from "process_if_else" (True for if_block, False for else_block)
+    fn process_if_else(&mut self, element: &Value) {
+        if let Some(if_else) = element.get("IfElse").and_then(Value::as_object) {
+            // Process condition
+            if let Some(condition) = if_else.get("condition").and_then(Value::as_object) {
+                if let Some(binary_op) = condition.get("BinaryOp") {
+                    if let Some(result) = self.evaluate_if_else_condition(binary_op) {
+                        let stdout = io::stdout();
+                        let mut handle = stdout.lock();
+                        writeln!(handle, "{}", if result { "True" } else { "False" }).unwrap();
+
+                        // Execute corresponding block based on condition result
+                        if result {
+                            self.execute_block(if_else.get("if_block").unwrap());
+                        } else {
+                            self.execute_block(if_else.get("else_block").unwrap());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    /// 🆕 Evaluates the condition for IfElse, checking if left == right for "=" operator
+    fn evaluate_if_else_condition(&self, binary_op: &Value) -> Option<bool> {
+        let left = binary_op.get("left")?;
+        let right = binary_op.get("right")?;
+        let op = binary_op.get("op")?.as_str()?;
+
+        if op == "=" {
+            let left_val = self.get_value_from_identifier_or_value(left);
+            let right_val = self.get_value_from_identifier_or_value(right);
+            return Some(left_val == right_val);
+        }
+
+        None
+    }
+
+    /// 🆕 Extracts the value for an Identifier or directly from a Value
+    fn get_value_from_identifier_or_value(&self, val: &Value) -> Value {
+        if let Some(identifier) = val.get("Identifier") {
+            let id_str = identifier.as_str().unwrap();
+            self.variables.get(id_str).cloned().unwrap_or(Value::Null)
+        } else {
+            val.clone()
+        }
+    }
+
+    /// 🆕 Executes a block of code (if_block or else_block)
+    fn execute_block(&mut self, block: &Value) {
+        if let Some(block) = block.get("Block").and_then(Value::as_array) {
+            for statement in block {
+                // Process each statement in the block
+                if let Some(write_array) = statement.get("Write").and_then(Value::as_array) {
+                    let stdout = io::stdout();
+                    let mut handle = stdout.lock();
+                    let mut output_line = String::new();
+                    for write_elem in write_array {
+                        if let Some(write_obj) = write_elem.as_object() {
+                            output_line.push_str(&self.process_write(write_obj, &HashMap::new()));
+                        }
+                    }
+                    writeln!(handle, "{}", output_line).unwrap();
+                }
+
+                // Handle variable assignments and function calls
+                self.process_variable_assign(statement);
+                self.process_function_call(statement); // Handle any function calls in the block
+            }
+        }
+    }
+
+
+
+
     /// ➕ Processes a variable assignment and adds it to the variables map
-    fn process_variable_assign(&mut self, var_assign: &serde_json::Map<String, Value>) {
+    fn process_variable_assign(&mut self, element: &Value) {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
-        let var_name = var_assign.get("name").unwrap().as_str().unwrap();
-        let var_value = var_assign.get("value").unwrap();
 
-        let cache_key = format!("VariableAssign:{:?}", var_assign); // Creating a key for caching
+        if let Some(var_assign) = element.get("VariableAssign").and_then(Value::as_object) {
+            let var_name = var_assign.get("name").unwrap().as_str().unwrap();
+            let var_value = var_assign.get("value").unwrap();
 
-        write!(handle, "{}\n", cache_key).unwrap();
+            let cache_key = format!("VariableAssign:{:?}", var_assign);
 
-        if let Some(cached_result) = self.cache.get(&cache_key) {
-            self.variables
-                .insert(var_name.to_string(), cached_result.clone()); // Returning the value from the cache
-        } else {
-            self.variables
-                .insert(var_name.to_string(), var_value.clone());
-            self.cache.insert(cache_key, var_value.clone()); // Caching a variable
+            write!(handle, "{}\n", cache_key).unwrap();
+
+            if let Some(cached_result) = self.cache.get(&cache_key) {
+                self.variables
+                    .insert(var_name.to_string(), cached_result.clone());
+            } else {
+                self.variables
+                    .insert(var_name.to_string(), var_value.clone());
+                self.cache.insert(cache_key, var_value.clone());
+            }
         }
     }
 
@@ -151,9 +220,6 @@ impl Interpreter {
             }
         } else if let Some(integer_val) = write_obj.get("Integer") {
             integer_val.as_i64().unwrap().to_string()
-        } else if let Some(function_call) = write_obj.get("FunctionCall") {
-            let result = self.process_function_call(function_call.as_object().unwrap());
-            result.to_string()
         } else {
             "Unknown data type in Write statement".to_string()
         };
@@ -163,69 +229,67 @@ impl Interpreter {
     }
 
     /// 📞 Processes a function call and returns its result
-    fn process_function_call(&mut self, call_obj: &serde_json::Map<String, Value>) -> i64 {
-        let stdout = io::stdout();
-        let mut handle = stdout.lock();
-        let cache_key = format!("{:?}", call_obj); // Creating a key for caching
-        write!(handle, "{}\n", cache_key).unwrap();
+    fn process_function_call(&mut self, element: &Value) -> i64 {
+        if let Some(call_obj) = element.get("FunctionCall").and_then(Value::as_object) {
+            let stdout = io::stdout();
+            let mut handle = stdout.lock();
+            let cache_key = format!("{:?}", call_obj); // Creating a key for caching
+            write!(handle, "{}\n", cache_key).unwrap();
 
-        if let Some(cached_result) = self.cache.get(&cache_key) {
-            return cached_result.as_i64().unwrap(); // We return the result from the cache, if there is one
-        }
+            if let Some(name) = call_obj.get("name").and_then(Value::as_str) {
+                if let Some(func) = self.functions.get(name).cloned() {
+                    let args = call_obj["args"].as_array().unwrap();
+                    if args.len() == func.args.len() {
+                        let arg_map: HashMap<String, Value> = func
+                            .args
+                            .iter()
+                            .cloned()
+                            .zip(args.iter().cloned())
+                            .collect();
 
-        if let Some(name) = call_obj.get("name").and_then(Value::as_str) {
-            if let Some(func) = self.functions.get(name).cloned() {
-                let args = call_obj["args"].as_array().unwrap();
-                if args.len() == func.args.len() {
-                    let arg_map: HashMap<String, Value> = func
-                        .args
-                        .iter()
-                        .cloned()
-                        .zip(args.iter().cloned())
-                        .collect();
+                        // Creating a new array of variables for the local scope of the function
+                        let mut local_scope = self.variables.clone(); // Cloning global variables
+                        local_scope.extend(arg_map.clone()); // Adding arguments to the local scope
 
-                    // Creating a new array of variables for the local scope of the function
-                    let mut local_scope = self.variables.clone(); // Cloning global variables
-                    local_scope.extend(arg_map.clone()); // Adding arguments to the local scope
+                        // We execute all commands from the body of the function with a local scope
+                        let result = self.execute_function_body(&func.body, &local_scope);
 
-                    // We execute all commands from the body of the function with a local scope
-                    let result = self.execute_function_body(&func.body, &local_scope);
-
-                    self.cache.insert(cache_key, Value::Number(result.into())); // Caching the result
-                    return result;
+                        return result;
+                    } else {
+                        write!(
+                            handle,
+                            "Error: Function '{}' expects {} arguments but {} were provided\n",
+                            name,
+                            func.args.len(),
+                            args.len()
+                        )
+                            .unwrap();
+                    }
                 } else {
-                    write!(
-                        handle,
-                        "Error: Function '{}' expects {} arguments but {} were provided\n",
-                        name,
-                        func.args.len(),
-                        args.len()
-                    )
-                    .unwrap();
+                    write!(handle, "Function '{}' not found\n", name).unwrap();
                 }
-            } else {
-                write!(handle, "Function '{}' not found\n", name).unwrap();
             }
         }
         0
     }
+
 
     /// 🛠️ Executes the body of a function and returns a result (if any)
     fn execute_function_body(&mut self, body: &Value, local_scope: &HashMap<String, Value>) -> i64 {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
         let cache_key = format!("{:?}{:?}", body, local_scope);
-        write!(handle, "{}\n", cache_key).unwrap();
 
-        if let Some(cached_result) = self.cache.get(&cache_key) {
-            return cached_result.as_i64().unwrap();
-        }
+        // Вывод ключа кэша для наблюдения
+        write!(handle, "Cash key: {}\n", cache_key).unwrap();
 
+        // Не используем закэшированный результат для повторного выполнения
         let mut return_value: Option<i64> = None;
-        let mut current_scope = local_scope.clone();
+        let current_scope = local_scope.clone();
 
         if let Some(block) = body.get("Block").and_then(Value::as_array) {
             for statement in block {
+                // Обрабатываем каждую команду `Write` независимо
                 if let Some(write_array) = statement.get("Write").and_then(Value::as_array) {
                     let mut output_line = String::new();
                     for write_elem in write_array {
@@ -235,35 +299,20 @@ impl Interpreter {
                     }
                     writeln!(handle, "{}", output_line).unwrap();
                 }
-                if let Some(var_assign) = statement.get("VariableAssign").and_then(Value::as_object)
-                {
-                    // We use the existing process_variable_assign function to process
-                    self.process_variable_assign(var_assign);
-                    let var_name = var_assign
-                        .get("name")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string();
-                    let var_value = var_assign.get("value").unwrap().clone();
-                    current_scope.insert(var_name, var_value);
-                }
-                if let Some(function_call) =
-                    statement.get("FunctionCall").and_then(Value::as_object)
-                {
-                    // We use the existing process_function_call function to process
-                    self.process_function_call(function_call);
-                }
+
+                // Обработка присвоения переменной и возвратного значения
+                self.process_variable_assign(statement);
+
                 if let Some(return_obj) = statement.get("Return").and_then(Value::as_object) {
                     return_value = Some(self.process_return(return_obj, &current_scope));
                 }
             }
         }
 
-        let result = return_value.unwrap_or(0);
-        self.cache.insert(cache_key, Value::Number(result.into())); // Caching the result
-        result
+        // Возвращаем результат, не кэшируя его для повторного использования
+        return_value.unwrap_or(0)
     }
+
 
     /// ↩️ Processes the Return statement and extracts the value to be returned
     fn process_return(
@@ -290,7 +339,7 @@ impl Interpreter {
                     "Return identifier '{}' not found\n",
                     identifier.as_str().unwrap()
                 )
-                .unwrap();
+                    .unwrap();
                 0
             }
         } else if let Some(binary_op) = return_obj.get("BinaryOp") {
@@ -334,7 +383,7 @@ impl Interpreter {
                         handle,
                         "BinaryOp error: one of the operands is not an integer.\n"
                     )
-                    .unwrap();
+                        .unwrap();
                     Value::Null
                 }
             }
@@ -346,7 +395,7 @@ impl Interpreter {
                         handle,
                         "BinaryOp error: one of the operands is not an integer.\n"
                     )
-                    .unwrap();
+                        .unwrap();
                     Value::Null
                 }
             }
@@ -358,7 +407,7 @@ impl Interpreter {
                         handle,
                         "BinaryOp error: one of the operands is not an integer.\n"
                     )
-                    .unwrap();
+                        .unwrap();
                     Value::Null
                 }
             }
@@ -375,7 +424,7 @@ impl Interpreter {
                         handle,
                         "BinaryOp error: one of the operands is not an integer.\n"
                     )
-                    .unwrap();
+                        .unwrap();
                     Value::Null
                 }
             }
@@ -430,26 +479,9 @@ impl Interpreter {
         let data: Value = from_str(json_str).unwrap();
         self.program = data["Program"].as_array().unwrap().to_vec();
 
-        let functions: Vec<Function> = self
-            .program
-            .iter()
-            .filter_map(|element| {
-                element.get("Function").map(|func_obj| Function {
-                    name: func_obj["name"].as_str().unwrap().to_string(),
-                    args: func_obj["args"]["FunctionArgs"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|arg| arg["Identifier"].as_str().unwrap().to_string())
-                        .collect(),
-                    body: func_obj["body"].clone(),
-                })
-            })
-            .collect();
-
-        for func in functions {
-            self.add_function(func);
-        }
+        // Создаем копию `self.program`, чтобы избежать заимствований
+        let program_copy = self.program.clone();
+        self.extract_functions_recursive(&program_copy);
 
         let stdout = io::stdout();
         let mut handle = stdout.lock();
@@ -466,7 +498,36 @@ impl Interpreter {
                     name,
                     serde_json::to_string_pretty(value).unwrap()
                 )
-                .unwrap();
+                    .unwrap();
+            }
+        }
+    }
+
+
+    // Функция для рекурсивного извлечения функций
+    fn extract_functions_recursive(&mut self, elements: &[Value]) {
+        for element in elements {
+            if let Some(func_obj) = element.get("Function") {
+                let function = Function {
+                    name: func_obj["name"].as_str().unwrap().to_string(),
+                    args: func_obj["args"]["FunctionArgs"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|arg| arg["Identifier"].as_str().unwrap().to_string())
+                        .collect(),
+                    body: func_obj["body"].clone(),
+                };
+                self.add_function(function);
+            }
+
+            // Проверяем вложенные объекты
+            for (_, value) in element.as_object().unwrap().iter() {
+                if value.is_array() {
+                    self.extract_functions_recursive(value.as_array().unwrap());
+                } else if value.is_object() {
+                    self.extract_functions_recursive(&[value.clone()]);
+                }
             }
         }
     }

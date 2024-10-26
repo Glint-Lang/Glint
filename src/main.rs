@@ -1,15 +1,15 @@
 use colored::Colorize;
 use peak_alloc::PeakAlloc;
-use serde_cbor;
+// use serde_cbor;
 use serde_json;
 use std::env;
 use std::fs;
 use std::time::Instant;
 use sysinfo::System;
-use Glint::ast::AST;
-use Glint::error::ParseError;
-use Glint::interpreter::interpreter::interpret_from_json;
-use Glint::parser::parser::parse_program;
+// use Glint::ast::AST;
+use glint::error::ParseError;
+use glint::interpreter::interpreter::interpret_from_json;
+use glint::parser::parser::parse_program;
 use os_info;
 
 #[global_allocator]
@@ -125,10 +125,10 @@ fn main() {
                             serde_json::to_string_pretty(&ast).expect("Failed to serialize AST");
 
                         // 🧩 Serialize the AST to CBOR format
-                        let ast_cbor =
-                            serde_cbor::to_vec(&ast).expect("Failed to serialize AST to CBOR");
-                        let deserialized_ast: AST =
-                            serde_cbor::from_slice(&ast_cbor).expect("Failed to deserialize CBOR");
+                        // let ast_cbor =
+                        //     serde_cbor::to_vec(&ast).expect("Failed to serialize AST to CBOR");
+                        // let deserialized_ast: AST =
+                        //     serde_cbor::from_slice(&ast_cbor).expect("Failed to deserialize CBOR");
 
                         println!("{}", ast_json);
                         // 🧠 Call the interpreter function with the JSON string
